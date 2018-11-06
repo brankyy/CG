@@ -1,1 +1,1 @@
-# CG
+# CG Exercise WS1819
