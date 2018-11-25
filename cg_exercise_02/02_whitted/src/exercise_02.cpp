@@ -27,7 +27,31 @@ bool intersect_sphere(
     cg_assert(t);
 	cg_assert(std::fabs(glm::length(ray_direction) - 1.f) < EPSILON);
 
-    return false;
+  const float a = glm::dot(ray_direction, ray_direction);
+  const float b = 2 * glm::dot(ray_direction, ray_origin - center);
+  const float c = glm::dot((ray_origin - center), (ray_origin - center)) - radius * radius;
+  const float delta = b * b - 4 * a * c;
+
+  if(delta == 0.f)
+  {
+    float temp = ( - b / a) * 0.5;
+    if(temp > 0.f)
+    {
+      *t = temp;
+      return true;
+    }
+    else
+      return false;
+  }
+
+  float temp3 = 0.5 * ( - b - sqrt(delta)) / a;
+  if(temp3 > 0.f)
+  {
+    *t = temp3;
+    return true;
+  }
+
+  return false;
 }
 
 /*
@@ -38,9 +62,11 @@ glm::vec3 SpotLight::getEmission(
 		) const
 {
 	cg_assert(std::fabs(glm::length(omega) - 1.f) < EPSILON);
- 
+
 	// TODO: implement a spotlight emitter as specified on the exercise sheet
-	return glm::vec3(0.f);
+  float costheta = glm::cos(dot(direction, omega));
+  glm::vec3 Emission = getPower() * (falloff + 2.f) * powf(std::max(0.f, costheta), falloff);
+	return Emission;
 }
 
 glm::vec3 evaluate_phong(
@@ -56,31 +82,44 @@ glm::vec3 evaluate_phong(
 	glm::vec3 contribution(0.f);
 
 	// iterate over lights and sum up their contribution
-	for (auto& light_uptr : data.context.get_active_scene()->lights) 
+	for (auto& light_uptr : data.context.get_active_scene()->lights)
 	{
 		// TODO: calculate the (normalized) direction to the light
 		const Light *light = light_uptr.get();
-		glm::vec3 L(0.0f, 1.0f, 0.0f);
+    glm::vec3 l = light -> Light::getPosition();
+		glm::vec3 L = glm::normalize(l - P);
 
 		float visibility = 1.f;
 		if (data.context.params.shadows) {
 			// TODO: check if light source is visible
+      visibility = visible(data, P, l);
 		}
+
+    float NdotL = glm::dot(N, L);
+    float distance2 = glm::length(l - P) * glm::length(l - P);
+    float O = NdotL > 0.f ? 1.f : 0.f ;
+
+    glm::vec3 coefficient = O * visibility * light -> Light::getEmission(-L) / distance2;
+    glm::vec3 RL = N * NdotL * 2.f - L;
+    float RLdotV = glm::dot(RL, V);
 
 		glm::vec3 diffuse(0.f);
 		if (data.context.params.diffuse) {
 			// TODO: compute diffuse component of phong model
+      diffuse = mat.k_d * (NdotL > 0.f ? NdotL : 0.f);
 		}
 
 		glm::vec3 specular(0.f);
 		if (data.context.params.specular) {
 			// TODO: compute specular component of phong model
+      specular = mat.k_s * powf(RLdotV > 0.f ? RLdotV : 0.f, mat.n);
 		}
 
 		glm::vec3 ambient = data.context.params.ambient ? mat.k_a : glm::vec3(0.0f);
 
 		// TODO: modify this and implement the phong model as specified on the exercise sheet
-		contribution += ambient * light->getPower();
+		contribution += ambient * light -> Light::getPower() / distance2 + (specular + diffuse) * coefficient;
+
 	}
 
 	return contribution;
@@ -94,7 +133,10 @@ glm::vec3 evaluate_reflection(
 	glm::vec3 const& V)			// view vector (already normalized)
 {
 	// TODO: calculate reflective contribution by constructing and shooting a reflection ray.
-	return glm::vec3(0.f);
+  glm::vec3 R = reflect(V, N);
+  glm::vec3 startpunkt = P + data.context.params.ray_epsilon * R;
+  Ray ray(startpunkt, R);
+  return trace_recursive(data, ray, depth + 1);
 }
 
 glm::vec3 evaluate_transmission(
@@ -106,8 +148,15 @@ glm::vec3 evaluate_transmission(
 	float eta)					// the relative refraction index
 {
 	// TODO: calculate transmissive contribution by constructing and shooting a transmission ray.
-	glm::vec3 contribution(0.f);
-	return contribution;
+  glm::vec3 T;
+  if(refract(V, N, eta, &T))
+  {
+    glm::vec3 startpunkt = P + data.context.params.ray_epsilon * T;
+    Ray ray(startpunkt, T);
+    return trace_recursive(data, ray, depth + 1);
+  }
+  else
+    return glm::vec3(0.f);
 }
 
 glm::vec3 handle_transmissive_material_single_ior(
@@ -118,13 +167,16 @@ glm::vec3 handle_transmissive_material_single_ior(
 	glm::vec3 const& V,			// view vector (already normalized)
 	float eta)					// the relative refraction index
 {
+  float F = fresnel(V, N, eta);
+  glm::vec3 T = evaluate_transmission(data, depth, P, N, V, eta);
+  glm::vec3 R = evaluate_reflection(data, depth, P, N, V);
 	if (data.context.params.fresnel) {
 		// TODO: replace with proper fresnel handling.
-		return evaluate_transmission(data, depth, P, N, V, eta);
+		return (1.f - F) * T + F * R;
 	}
 	else {
 		// just regular transmission
-		return evaluate_transmission(data, depth, P, N, V, eta);
+		return T;
 	}
 }
 
@@ -138,8 +190,12 @@ glm::vec3 handle_transmissive_material(
 {
 	if (data.context.params.dispersion && !(eta_of_channel[0] == eta_of_channel[1] && eta_of_channel[0] == eta_of_channel[2])) {
 		// TODO: split ray into 3 rays (one for each color channel) and implement dispersion here
-		glm::vec3 contribution(0.f);
-		return contribution;
+    glm::vec3 x, y, z;
+    x = handle_transmissive_material_single_ior(data, depth, P, N, V, eta_of_channel[0]);
+    y = handle_transmissive_material_single_ior(data, depth, P, N, V, eta_of_channel[1]);
+    z = handle_transmissive_material_single_ior(data, depth, P, N, V, eta_of_channel[2]);
+
+		return glm::vec3(x.x, y.y, z.z);
 	}
 	else {
 		// dont handle transmission, take average refraction index instead.
