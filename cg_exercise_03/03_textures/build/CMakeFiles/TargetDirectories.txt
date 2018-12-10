@@ -1,0 +1,6 @@
+/media/sf_shared/cg_exercise_03/03_textures/build/CMakeFiles/edit_cache.dir
+/media/sf_shared/cg_exercise_03/03_textures/build/CMakeFiles/rebuild_cache.dir
+/media/sf_shared/cg_exercise_03/03_textures/build/CMakeFiles/cg.dir
+/media/sf_shared/cg_exercise_03/cglib/build/cglib/CMakeFiles/edit_cache.dir
+/media/sf_shared/cg_exercise_03/cglib/build/cglib/CMakeFiles/rebuild_cache.dir
+/media/sf_shared/cg_exercise_03/cglib/build/cglib/CMakeFiles/cglib_cg_3.dir
