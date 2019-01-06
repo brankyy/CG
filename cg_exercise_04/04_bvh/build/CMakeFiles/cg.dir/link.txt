@@ -1,0 +1,1 @@
+/usr/bin/c++   -fPIC -O1 -std=c++11 -Wall -Wundef -Wshadow -Werror=undef -Wfatal-errors  -g   CMakeFiles/cg.dir/src/main.cpp.o CMakeFiles/cg.dir/src/exercise_04.cpp.o  -o ../cg -rdynamic /media/sf_shared/cg_exercise_04/cglib/build/cglib/libcglib_cg_4.a -lGLEW -lglfw -lXxf86vm -lXrandr -lXi -lX11 -lGLU -lGL -lm -lstdc++ -lpthread 
